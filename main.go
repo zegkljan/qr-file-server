@@ -32,7 +32,7 @@ func main() {
 	ctx, cancel := context.WithCancel(context.Background())
 	started := make(chan struct{})
 	finished := make(chan error)
-	truePort, addr, link, err := serve(ctx, started, finished, *port, *keep, filename)
+	link, err := serve(ctx, started, finished, *port, *keep, filename)
 	if err != nil {
 		fmt.Println(fmt.Errorf("failed to start server: %w", err))
 		return
@@ -41,7 +41,7 @@ func main() {
 
 	fmt.Printf("%s served at %s\n", filename, link)
 
-	printQR(addr, truePort, *big)
+	printQR(link, *big)
 
 	sig := make(chan os.Signal, 1)
 	signal.Notify(sig, os.Interrupt)
@@ -58,17 +58,17 @@ func main() {
 	}
 }
 
-func serve(ctx context.Context, started chan struct{}, finished chan error, port int, keep bool, filename string) (int, string, string, error) {
+func serve(ctx context.Context, started chan struct{}, finished chan error, port int, keep bool, filename string) (string, error) {
 	localAddr, err := getOutboundIP()
 	if err != nil {
-		return -1, "", "", fmt.Errorf("failed to determine local ip address: %w", err)
+		return "", fmt.Errorf("failed to determine local ip address: %w", err)
 	}
 	server := &http.Server{
 		Addr: fmt.Sprintf("%s:%d", localAddr.String(), port),
 	}
 	listener, err := net.Listen("tcp", server.Addr)
 	if err != nil {
-		return -1, "", "", fmt.Errorf("failed to listen: %w", err)
+		return "", fmt.Errorf("failed to listen: %w", err)
 	}
 	truePort := listener.Addr().(*net.TCPAddr).Port
 	addr := listener.Addr().(*net.TCPAddr).IP.String()
@@ -109,7 +109,7 @@ func serve(ctx context.Context, started chan struct{}, finished chan error, port
 		serverFinished <- server.Serve(listener)
 		fmt.Println("Server finished.")
 	}()
-	return truePort, addr, fmt.Sprintf("http://%s:%d/%s", addr, truePort, esc), nil
+	return fmt.Sprintf("http://%s:%d/%s", addr, truePort, esc), nil
 }
 
 // Get preferred outbound ip of this machine
@@ -126,9 +126,7 @@ func getOutboundIP() (net.IP, error) {
 	return localAddr.IP, nil
 }
 
-func printQR(host string, port int, big bool) {
-	qrText := fmt.Sprintf("http://%s:%d/file", host, port)
-
+func printQR(link string, big bool) {
 	config := qrterminal.Config{
 		Level:          qrterminal.L,
 		BlackChar:      qrterminal.BLACK_BLACK,
@@ -143,5 +141,5 @@ func printQR(host string, port int, big bool) {
 		config.BlackChar = qrterminal.BLACK
 		config.WhiteChar = qrterminal.WHITE
 	}
-	qrterminal.GenerateWithConfig(qrText, config)
+	qrterminal.GenerateWithConfig(link, config)
 }
